@@ -1,0 +1,49 @@
+<!--
+    This sample policy enforces Azure AD authentication and authorization to the Azure OpenAI Service. 
+    It limits the authorization tokens issued by the organization's tenant for Cognitive Services.
+    The authorization token is passed on to the Azure OpenAI Service ensuring authorization to the actions within
+    the service are limited to the permissions defined in Azure RBAC.
+
+    The sample policy also sets different throttling limits per application id. This is useful when an organization
+    has multiple applications consuming the same instance of the Azure OpenAI Service. This sample shows throttling
+    rules for two separate applications.
+
+    You must provide values for the AZURE_OAI_SERVICE_NAME, TENANT_ID, and CLIENT_ID_APP parameters. You can add multiple
+    lines for as many applications as you need to throttle.
+-->
+<policies>
+    <inbound>
+        <base />
+        <set-backend-service base-url="https://{{AZURE_OAI_SERVICE_NAME}}.openai.azure.com/openai" />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+            <openid-config url="https://login.microsoftonline.com/{{TENANT_ID}}/v2.0/.well-known/openid-configuration" />
+            <issuers>
+                <issuer>https://sts.windows.net/{{TENANT_ID}}/</issuer>
+            </issuers>
+            <required-claims>
+                <claim name="aud">
+                    <value>https://cognitiveservices.azure.com</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <choose>
+            <when condition="@(context.Request.Headers.GetValueOrDefault("Authorization","").Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty).Equals("{{CLIENT_ID_APP1}}"))">
+                <rate-limit-by-key calls="1" renewal-period="60" counter-key="@(context.Request.Headers.GetValueOrDefault("Authorization","").Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty))" increment-condition="@(context.Response.StatusCode == 200)" />
+            </when>
+        </choose>
+        <choose>
+            <when condition="@(context.Request.Headers.GetValueOrDefault("Authorization","").Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty).Equals("{{CLIENT_ID_APP2}}"))">
+                <rate-limit-by-key calls="10" renewal-period="60" counter-key="@(context.Request.Headers.GetValueOrDefault("Authorization","").Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty))" increment-condition="@(context.Response.StatusCode == 200)" />
+            </when>
+        </choose>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
