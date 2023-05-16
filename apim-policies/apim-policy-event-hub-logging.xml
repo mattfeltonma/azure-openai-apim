@@ -13,25 +13,24 @@
 <policies>
     <inbound>
         <base />
-        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
-            <openid-config url="https://login.microsoftonline.com/{{TENANT_ID}}/v2.0/.well-known/openid-configuration" />
-            <issuers>
-                <issuer>https://sts.windows.net/{{TENANT_ID}}/</issuer>
-            </issuers>
-            <required-claims>
-                <claim name="aud">
-                    <value>https://cognitiveservices.azure.com</value>
-                </claim>
-            </required-claims>
-        </validate-jwt>
-        <set-variable name="message-id" value="@(Guid.NewGuid())" />
-        <choose>
-            <when condition="@((context.Operation.Id).Equals("Completions_Create"))">
-                <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="0">@{
+            <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+                <openid-config url="https://login.microsoftonline.com/{{TENANT_ID}}/v2.0/.well-known/openid-configuration" />
+                <issuers>
+                    <issuer>https://sts.windows.net/{{TENANT_ID}}/</issuer>
+                </issuers>
+                <required-claims>
+                    <claim name="aud">
+                        <value>https://cognitiveservices.azure.com</value>
+                    </claim>
+                </required-claims>
+            </validate-jwt>
+            <set-variable name="message-id" value="@(Guid.NewGuid())" />
+            <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="0">@{
 
                 var requestBody = context.Request.Body?.As<JObject>(true);
 
-                string prompt = requestBody["prompt"].ToString();
+                string prompt = requestBody["prompt"]?.ToString();
+                string messages = requestBody["messages"]?.ToString();
 
                 return new JObject(
                     new JProperty("event-time", DateTime.UtcNow.ToString()),
@@ -40,85 +39,35 @@
                     new JProperty("operationname", context.Operation.Id),
                     new JProperty("prompt", prompt)
                 ).ToString();
-            
-                }</log-to-eventhub>
-            </when>
-        </choose>
-        <choose>
-            <when condition="@((context.Operation.Id).Equals("ChatCompletions_Create"))">
-                <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="0">@{
-
-                var requestBody = context.Request.Body?.As<JObject>(true);
-
-                string messages = requestBody["messages"].ToString();
-
-                return new JObject(
-                    new JProperty("event-time", DateTime.UtcNow.ToString()),
-                    new JProperty("message-id", context.Variables["message-id"]),
-                    new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
-                    new JProperty("operationname", context.Operation.Id),
-                    new JProperty("messages", messages)
-                ).ToString();
-            
-                }</log-to-eventhub>
-            </when>
-        </choose>
+            }</log-to-eventhub>
     </inbound>
     <backend>
         <base />
     </backend>
     <outbound>
         <base />
-        <choose>
-            <when condition="@((context.Operation.Id).Equals("Completions_Create"))">
-                <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="1">@{
+            <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="1">@{
 
-            var responseBody = context.Response.Body?.As<JObject>(true);
+                var responseBody = context.Response.Body?.As<JObject>(true);
 
-            string response = responseBody["choices"].ToString();
+                string response = responseBody["choices"].ToString();
 
-            return new JObject(
-                new JProperty("event-time", DateTime.UtcNow.ToString()),
-                new JProperty("message-id", context.Variables["message-id"]),
-                new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
-                new JProperty("operationname", context.Operation.Name),
-                new JProperty("choices",response),
-                new JProperty("operation", responseBody["object"].ToString()),
-                new JProperty("model", responseBody["model"].ToString()),
-                new JProperty("modeltime", context.Response.Headers.GetValueOrDefault("Openai-Processing-Ms",string.Empty)),
-                new JProperty("completion_tokens", responseBody["usage"]["completion_tokens"].ToString()),
-                new JProperty("prompt_tokens", responseBody["usage"]["prompt_tokens"].ToString()),
-                new JProperty("total_tokens", responseBody["usage"]["total_tokens"].ToString())
-            ).ToString();
+                return new JObject(
+                    new JProperty("event-time", DateTime.UtcNow.ToString()),
+                    new JProperty("message-id", context.Variables["message-id"]),
+                    new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
+                    new JProperty("operationname", context.Operation.Name),
+                    new JProperty("choices",response),
+                    new JProperty("operation", responseBody["object"].ToString()),
+                    new JProperty("model", responseBody["model"].ToString()),
+                    new JProperty("modeltime", context.Response.Headers.GetValueOrDefault("Openai-Processing-Ms",string.Empty)),
+                    new JProperty("completion_tokens", responseBody["usage"]["completion_tokens"].ToString()),
+                    new JProperty("prompt_tokens", responseBody["usage"]["prompt_tokens"].ToString()),
+                    new JProperty("total_tokens", responseBody["usage"]["total_tokens"].ToString())
+                ).ToString();
             
-                }</log-to-eventhub>
-            </when>
-        </choose>
-        <choose>
-            <when condition="@((context.Operation.Id).Equals("ChatCompletions_Create"))">
-                <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="1">@{
-
-            var responseBody = context.Response.Body?.As<JObject>(true);
-
-            string response = responseBody["choices"].ToString();
-
-            return new JObject(
-                new JProperty("event-time", DateTime.UtcNow.ToString()),
-                new JProperty("message-id", context.Variables["message-id"]),
-                new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
-                new JProperty("operationname", context.Operation.Name),
-                new JProperty("operation", responseBody["object"].ToString()),
-                new JProperty("choices", response),
-                new JProperty("model", responseBody["model"].ToString()),
-                new JProperty("modeltime", context.Response.Headers.GetValueOrDefault("Openai-Processing-Ms",string.Empty)),
-                new JProperty("completion_tokens", responseBody["usage"]["completion_tokens"].ToString()),
-                new JProperty("prompt_tokens", responseBody["usage"]["prompt_tokens"].ToString()),
-                new JProperty("total_tokens", responseBody["usage"]["total_tokens"].ToString())
-            ).ToString();
-            
-                }</log-to-eventhub>
-            </when>
-        </choose>
+            }</log-to-eventhub>
+        
     </outbound>
     <on-error>
         <base />
