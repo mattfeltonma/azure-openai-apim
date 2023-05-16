@@ -17,7 +17,7 @@
         "eventHubName": {
             "type": "string",
             "metadata": {
-                "description": "The name of the Event Hub"
+                "description": "The name of the specific Event Hub in the Event Hub Namespace that messages will be delivered to"
             }
         },
         "eventHubNamespaceName": {
