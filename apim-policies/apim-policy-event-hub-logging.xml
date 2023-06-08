@@ -8,7 +8,8 @@
     the model used, and the number of tokens consumed. This can be helpful when handling chargebacks. The events are delivered
     to an Azure Event Hub through the Azure API Management Logger.
 
-    You must provide values for the AZURE_OAI_SERVICE_NAME, TENANT_ID, and YOUR_LOGGER parameters. 
+    You must provide values for the AZURE_OAI_SERVICE_NAME, TENANT_ID, YOUR_LOGGER_COMPLIANCE, and YOUR_LOGGER_CHARGEBACK a parameters.
+    You can use separate APIM Loggers for compliance and chargeback or the same logger. It is your choice.
 -->
 <policies>
     <inbound>
@@ -25,7 +26,7 @@
                 </required-claims>
             </validate-jwt>
             <set-variable name="message-id" value="@(Guid.NewGuid())" />
-            <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="0">@{
+            <log-to-eventhub logger-id="{{YOUR_LOGGER_COMPLIANCE}}" partition-id="0">@{
 
                 var requestBody = context.Request.Body?.As<JObject>(true);
 
@@ -34,11 +35,14 @@
 
                 return new JObject(
                     new JProperty("event-time", DateTime.UtcNow.ToString()),
+                    new JProperty("backend", context.Request.Url.Host.ToString()),
                     new JProperty("message-id", context.Variables["message-id"]),
                     new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
                     new JProperty("operationname", context.Operation.Id),
-                    new JProperty("prompt", prompt)
+                    new JProperty("prompt", prompt),
+                    new JProperty("messages", messages)
                 ).ToString();
+
             }</log-to-eventhub>
     </inbound>
     <backend>
@@ -46,18 +50,33 @@
     </backend>
     <outbound>
         <base />
-            <log-to-eventhub logger-id="{{YOUR_LOGGER}}" partition-id="1">@{
+            <log-to-eventhub logger-id="{{YOUR_LOGGER_COMPLIANCE}}" partition-id="1">@{
 
                 var responseBody = context.Response.Body?.As<JObject>(true);
 
-                string response = responseBody["choices"].ToString();
+                string response = responseBody["choices"]?.ToString();
+
+                return new JObject(
+                    new JProperty("event-time", DateTime.UtcNow.ToString()),
+                    new JProperty("backend", context.Request.Url.Host.ToString()),
+                    new JProperty("response-time", context.Response.Headers.GetValueOrDefault("openai-processing-ms",string.Empty)),
+                    new JProperty("message-id", context.Variables["message-id"]),
+                    new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
+                    new JProperty("choices",response),
+                    new JProperty("operation", responseBody["object"].ToString()),
+                    new JProperty("model", responseBody["model"].ToString())
+                ).ToString();
+            
+            }</log-to-eventhub>
+
+            <log-to-eventhub logger-id="{{YOUR_LOGGER_CHARGEBACK}}" partition-id="0">@{
+
+                var responseBody = context.Response.Body?.As<JObject>(true);
 
                 return new JObject(
                     new JProperty("event-time", DateTime.UtcNow.ToString()),
                     new JProperty("message-id", context.Variables["message-id"]),
                     new JProperty("appid", context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty)),
-                    new JProperty("operationname", context.Operation.Name),
-                    new JProperty("choices",response),
                     new JProperty("operation", responseBody["object"].ToString()),
                     new JProperty("model", responseBody["model"].ToString()),
                     new JProperty("modeltime", context.Response.Headers.GetValueOrDefault("Openai-Processing-Ms",string.Empty)),
