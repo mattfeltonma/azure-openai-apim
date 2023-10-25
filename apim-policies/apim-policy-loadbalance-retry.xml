@@ -29,7 +29,7 @@
         <when condition="@(context.Variables.GetValueOrDefault<int>("urlId") == 1 && context.Response.StatusCode > 400)">
           <set-backend-service base-url="{{backend-url-2}}" />
         </when>
-        <when condition="@(context.Variables.GetValueOrDefault<int>("urlId") == 2) && context.Response.StatusCode > 400">
+        <when condition="@(context.Variables.GetValueOrDefault<int>("urlId") == 2 && context.Response.StatusCode > 400">
           <set-backend-service base-url="{{backend-url-1}}" />
         </when>
         <otherwise>
