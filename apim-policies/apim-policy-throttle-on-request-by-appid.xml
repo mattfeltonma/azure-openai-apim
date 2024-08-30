@@ -1,5 +1,5 @@
 <!--
-    This sample policy enforces Azure AD authentication and authorization to the Azure OpenAI Service. 
+    This sample policy enforces Entra ID authentication and authorization to the Azure OpenAI Service. 
     It limits the authorization tokens issued by the organization's tenant for Cognitive Services.
     The authorization token is passed on to the Azure OpenAI Service ensuring authorization to the actions within
     the service are limited to the permissions defined in Azure RBAC.
