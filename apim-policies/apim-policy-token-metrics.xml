@@ -1,0 +1,23 @@
+                <!-- Validate that an access token is included and it was issued by a trusted tenant -->
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden. You must use an Entra ID identity">
+            <openid-config url="https://login.microsoftonline.com/{{YOUR_ENTRA_ID_TENANT_ID}}/v2.0/.well-known/openid-configuration" />
+            <issuers>
+                <issuer>https://sts.windows.net/{{YOUR_ENTRA_ID_TENANT_ID}}/</issuer>
+            </issuers>
+            <required-claims>
+                <claim name="aud">
+                    <value>https://cognitiveservices.azure.com</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <!-- Extract the application id from the Entra ID access token -->
+        <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty))" />
+        <!-- Extract the model name from the URL -->
+        <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+        <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+        <!-- Emit token metrics to Application Insights -->
+        <azure-openai-emit-token-metric namespace="openai-metrics">
+            <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+            <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+            <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+        </azure-openai-emit-token-metric>

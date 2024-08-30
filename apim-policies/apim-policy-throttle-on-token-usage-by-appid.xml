@@ -1,0 +1,16 @@
+        <!-- Validate that an access token is included and it was issued by a trusted tenant -->
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+            <openid-config url="https://{{YOUR_ENTRA_ID_TENANT_ID}}/v2.0/.well-known/openid-configuration" />
+            <issuers>
+                <issuer>https://sts.windows.net/{{YOUR_ENTRA_ID_TENANT_ID}}/</issuer>
+            </issuers>
+            <required-claims>
+                <claim name="aud">
+                    <value>https://cognitiveservices.azure.com</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <!-- Extract the appid from the access token -->
+        <set-variable name="appid" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", string.Empty))" />
+        <!-- Throttle token usage based on the appid -->
+        <azure-openai-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="{{NUMBER_OF_TOKENS_TO_LIMIT_TO}}" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
